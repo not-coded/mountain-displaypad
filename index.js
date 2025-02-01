@@ -30,7 +30,7 @@ function findDevicePaths(devices) {
 	}
 
 	let displayPath = connectedDisplaypads.filter((device) => {
-		return device.interface==1
+		return device.interface==0
 	})[0].path
 
 	let devicePath = connectedDisplaypads.filter((device) => {
@@ -270,13 +270,18 @@ class Displaypad extends EventEmitter {
 			if (this.queue.length > 0) {
 				this.#startPixelTransfer(this.queue[0].keyIndex)
 			}
-
+		} else if(data[0] == 0xff && data[1] == 0xaa) { // No idea what this is
+			// Sending the init message fixes it though 
+			this.#reset();
 		} else if (data[0] == 0x21) { // Response to image transfer message
 			if (data[1] == 0x00 && data[2] == 0x00) {
 				// The displaypad echoes the IMG_MSG. After receiving the echo,
 				// the image can be transfered.
 				var request = this.queue[0]
 				var data = Buffer.concat([this.imageHeader, request.pixels])
+
+				// Using this.display or this.device doesn't prevent the stacktrace.
+				// I believe this is due to the request.pixels buffer being too big, as writing just the imageHeader (or anything else for that matter) doesn't throw an error.
 
 				for (let i=0; i < data.length; i+=1024) {
 				        const chunk = data.slice(i, i+1024)
@@ -298,7 +303,13 @@ class Displaypad extends EventEmitter {
 
 	#reset() {
 		this.initializing = true
-		this.device.write(Buffer.from(INIT_MSG, 'hex'))
+		var data = Buffer.from(INIT_MSG, 'hex');
+
+		try {
+			this.display.write(data) // This is for when the device is connected but turned off.
+		} catch (e) { }
+
+		this.device.write(data)
 	}
 
 	/**
